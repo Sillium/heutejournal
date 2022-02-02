@@ -31,7 +31,7 @@ provider:
   memorySize: 128
   timeout: 15
   region: eu-central-1
-  deploymentBucket: serverless-deployments-${param:accountId}
+#  deploymentBucket: serverless-deployments-${param:accountId}
   tracing:
     lambda: true
   stackTags:
