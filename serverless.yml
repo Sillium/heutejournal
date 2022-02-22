@@ -1,5 +1,3 @@
-org: stoerk
-app: sillium-heutejournal
 service: heutejournal
 
 frameworkVersion: '3'
@@ -12,13 +10,6 @@ custom:
     domainName: ${self:service}.sillium.xyz
   wsgi:
     app: app.app
-  apiCloudFront:
-    domain: ${self:custom.${self:custom.stage}.domainName}
-    certificate: ${param:certificateArn}
-    logging:
-      bucket: cloudfront-logs-${param:accountId}.s3.amazonaws.com
-      prefix: ${self:service}/${self:custom.stage}
-    cookies: none
   pythonRequirements:
     pythonBin: python3
 
@@ -27,19 +18,7 @@ provider:
   runtime: python3.8
   stage: ${self:custom.stage}
   lambdaHashingVersion: '20201221'
-  logRetentionInDays: 7
-  memorySize: 128
-  timeout: 15
   region: eu-central-1
-#  deploymentBucket: serverless-deployments-${param:accountId}
-  tracing:
-    lambda: true
-  stackTags:
-    source: https://github.com/Sillium/heutejournal
-    serverlessOrg: ${self:org}
-    serverlessApp: ${self:app}
-    serverlessService: ${self:service}
-    serverlessStage: ${self:custom.stage}
 
 functions:
   getStartTime:
@@ -55,4 +34,3 @@ functions:
 plugins:
   - serverless-wsgi
   - serverless-python-requirements
-  - serverless-api-cloudfront

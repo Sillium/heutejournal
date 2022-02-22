@@ -1,11 +1,10 @@
 {
-  "name": "tagesthemen-api",
+  "name": "heutejournal",
   "version": "1.0.0",
-  "description": "Tagesthemen API",
+  "description": "",
   "author": "",
   "devDependencies": {
     "serverless-python-requirements": "latest",
-    "serverless-wsgi": "latest",
-    "serverless-api-cloudfront": "latest"
+    "serverless-wsgi": "latest"
   }
 }

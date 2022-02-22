@@ -1,1 +1,3 @@
-Fork von https://github.com/johl/tagesthemen, per [Serverless-Framework](https://www.serverless.com/) deployed in eine [AWS Lambda mit API Gateway](https://7rf3jp6b97.execute-api.eu-central-1.amazonaws.com/prod/tagesthemen).
+# heutejorunal
+
+This repo + branch is for serverless-python-requirements-plugin debugging only.
