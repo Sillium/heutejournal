@@ -1,4 +1,8 @@
 .serverless
+.serverless-wsgi
+serverless_wsgi.py
+wsgi_handler.py
+
 node_modules
 package-lock.json
 *.pyc
