@@ -21,13 +21,15 @@ def get_when(search_term):
     titles = []
     dates = []
     for tr in trs:
-        for string in tr.stripped_strings:
-            print(repr(string))
+#        for string in tr.stripped_strings:
+#            print(repr(string))
         try:
+            print(f"content[1]: {tr.contents[1].stripped_strings}")
             d = str(tr.contents[1]).strip()
             if d:
                 dates.append(d)
 
+            print(f"content[2]: {tr.contents[2].stripped_strings}")
             t = str(tr.contents[2]).strip()
             if t:
                 titles.append(t)            
