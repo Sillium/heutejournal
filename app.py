@@ -21,6 +21,8 @@ def get_when(search_term):
     titles = []
     dates = []
     for tr in trs:
+        for string in tr.stripped_strings:
+            print(repr(string))
         try:
             d = str(tr.contents[1]).strip()
             if d:
