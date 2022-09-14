@@ -1,13 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask
-from flask import render_template
-
-app = Flask(__name__)
 
 base_url = "https://www.tvspielfilm.de/tv-programm/sendungen/zdf,ZDF.html"
 
 def get_when(search_term):
+#    tz = pytz.timezone('Europe/Berlin')
+#    today = str(datetime.datetime.now(tz).strftime("%d.%m.%Y"))
+#    url = base_url + today
     url = base_url
     r = requests.get(url)
     soup = soup = BeautifulSoup(r.text, "html.parser")
@@ -35,20 +34,4 @@ def get_when(search_term):
         "url": url
     }
 
-@app.route("/json")
-def json():
-    return get_when("heute journal")
-
-@app.route("/plain")
-def plain_text():
-    return get_when("heute journal")["when"]
-
-@app.route("/")
-def index():
-    answer = "Das heute journal kommt heute um " + get_when("heute journal")["when"] + " im ZDF."
-    return render_template("index.html", when=answer, url=get_when("heute journal")["url"])
-
-@app.after_request
-def add_security_headers(response):
-    response.headers['Cache-Control'] = 'max-age=300'
-    return response
+print(get_when("heute journal"))
