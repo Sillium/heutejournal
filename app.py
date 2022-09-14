@@ -24,7 +24,7 @@ def get_when(search_term):
 #        for string in tr.stripped_strings:
 #            print(repr(string))
         try:
-            tds = tr.findChildren()
+            tds = tr.findAll("td")
             td_date = tds[1]
             td_title = tds[2]
 
