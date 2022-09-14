@@ -24,19 +24,20 @@ def get_when(search_term):
 #        for string in tr.stripped_strings:
 #            print(repr(string))
         try:
-            print(f"content[1]:")
-            for string in tr.contents[1].stripped_strings:
-                print(repr(string))
-            d = str(tr.contents[1]).strip()
-            if d:
-                dates.append(d)
+            tds = tr.findChildren()
+            td_date = tds[1]
+            td_title = tds[2]
 
-            print(f"content[2]:")
-            for string in tr.contents[2].stripped_strings:
-                print(repr(string))
-            t = str(tr.contents[2]).strip()
-            if t:
-                titles.append(t)            
+            print(f"date: {td_date.contents}")
+#            print(f"date: {str(td_date.contents[0]).strip()}")
+#            d = str(tr.contents[1]).strip()
+#            if d:
+#                dates.append(d)
+
+            print(f"title: {td_title.contents}")
+#            t = str(tr.contents[2]).strip()
+#            if t:
+#                titles.append(t)            
         except KeyError:
             """Ignore the tag that doesn't have a class atribute"""
             pass
