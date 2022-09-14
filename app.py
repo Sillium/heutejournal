@@ -8,32 +8,32 @@ from flask import render_template
 
 app = Flask(__name__)
 
-base_url = "https://programm.ard.de/programm/sender?sender=28106&datum="
+base_url = "https://www.tvspielfilm.de/tv-programm/sendungen/zdf,ZDF.html"
 
 def get_when(search_term):
-    tz = pytz.timezone('Europe/Berlin')
-    today = str(datetime.datetime.now(tz).strftime("%d.%m.%Y"))
-    url = base_url + today
+#    tz = pytz.timezone('Europe/Berlin')
+#    today = str(datetime.datetime.now(tz).strftime("%d.%m.%Y"))
+#    url = base_url + today
+    url = base_url
     r = requests.get(url)
     soup = soup = BeautifulSoup(r.text, "html.parser")
-    spans = soup.findAll("span")
+    trs = soup.findAll("tr")
     titles = []
     dates = []
-    for span in spans:
+    for tr in trs:
         try:
-            classes = span["class"]
-            if "title" in classes:
-                s = str(span.contents[0]).strip()
-                if s:
-                    titles.append(s)
-            if "date" in classes:
-                s = str(span.contents[0]).strip()
-                if s:
-                    dates.append(s)
+            d = str(tr.contents[1]).strip()
+            if d:
+                dates.append(d)
+
+            t = str(tr.contents[2]).strip()
+            if t:
+                titles.append(t)            
         except KeyError:
             """Ignore the tag that doesn't have a class atribute"""
             pass
     program = dict(zip(titles, dates))
+    print(program)
     return {
         "when": program[search_term],
         "searchTerm": search_term,
@@ -42,16 +42,16 @@ def get_when(search_term):
 
 @app.route("/json")
 def json():
-    return get_when("Tagesthemen")
+    return get_when("heute journal")
 
 @app.route("/plain")
 def plain_text():
-    return get_when("Tagesthemen")["when"]
+    return get_when("heute journal")["when"]
 
 @app.route("/")
 def index():
-    answer = "Die Tagesthemen kommen heute um " + get_when("Tagesthemen")["when"] + " in der ARD."
-    return render_template("index.html", when=answer, url=get_when("Tagesthemen")["url"])
+    answer = "Das heute journal kommt heute um " + get_when("heute journal")["when"] + " im ZDF."
+    return render_template("index.html", when=answer, url=get_when("heute journal")["url"])
 
 @app.after_request
 def add_security_headers(response):
