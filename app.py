@@ -31,7 +31,7 @@ def get_when(search_term):
             pass
     program = dict(zip(titles, dates))
     return {
-        "when": program[search_term],
+        "when": (search_term in program) ? program[search_term] : "-",
         "searchTerm": search_term,
         "url": url
     }
