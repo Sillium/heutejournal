@@ -15,6 +15,7 @@ const PluginManager = require('./classes/plugin-manager');
 const Utils = require('./classes/utils');
 const Service = require('./classes/service');
 const ConfigSchemaHandler = require('./classes/config-schema-handler');
+const Console = require('./classes/console');
 const ServerlessError = require('./serverless-error');
 const version = require('./../package.json').version;
 const isStandaloneExecutable = require('./utils/is-standalone-executable');
@@ -22,6 +23,7 @@ const logDeprecation = require('./utils/log-deprecation');
 const eventuallyUpdate = require('./utils/eventually-update');
 const commmandsSchema = require('./cli/commands-schema');
 const resolveCliInput = require('./cli/resolve-input');
+const isDashboardEnabled = require('./configuration/is-dashboard-enabled');
 
 // Old local fallback is triggered in older versions by Serverless constructor directly
 const isStackFromOldLocalFallback = RegExp.prototype.test.bind(
@@ -116,6 +118,8 @@ class Serverless {
     this.isStandaloneExecutable = isStandaloneExecutable;
     this.triggeredDeprecations = logDeprecation.triggeredDeprecations;
 
+    this.console = new Console(this);
+
     // TODO: Remove once "@serverless/dashboard-plugin" is integrated into this repository
     this._commandsSchema = commmandsSchema;
   }
@@ -160,6 +164,7 @@ class Serverless {
 
       // If in context of service, validate the service configuration
       if (this.serviceDir) await this.service.validate();
+      await this.console.initialize();
     }
 
     this.serviceOutputs = new Map();
@@ -196,6 +201,13 @@ class Serverless {
 
   getVersion() {
     return this.version;
+  }
+
+  get isDashboardEnabled() {
+    return isDashboardEnabled({
+      configuration: this.configurationInput,
+      options: this.processedInput.options,
+    });
   }
 
   // Only for internal use

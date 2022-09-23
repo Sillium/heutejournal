@@ -56,7 +56,7 @@ module.exports = {
     }
 
     // Get info from CloudFormation Outputs
-    return BbPromise.all(sdkRequests).then(() => {
+    return BbPromise.all(sdkRequests).then(async () => {
       let outputs;
 
       if (stackData.outputs) {
@@ -74,6 +74,13 @@ module.exports = {
           functionInfo.name = func;
           functionInfo.deployedName = functionObj.name;
           functionInfo.artifactSize = functionObj.artifactSize;
+          const functionUrlOutput = outputs.find(
+            (output) =>
+              output.OutputKey === this.provider.naming.getLambdaFunctionUrlOutputLogicalId(func)
+          );
+          if (functionUrlOutput) {
+            functionInfo.url = functionUrlOutput.OutputValue;
+          }
           this.gatheredData.info.functions.push(functionInfo);
         });
 

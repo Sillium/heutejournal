@@ -6,6 +6,8 @@ const awsServiceOptions = require('./common-options/aws-service');
 
 const commands = (module.exports = new Map());
 
+commands.commonOptions = globalOptions;
+
 commands.set('', {
   usage: 'Interactive Quickstart',
   serviceDependencyMode: 'optional',
@@ -23,6 +25,10 @@ commands.set('', {
     },
     'template-url': {
       usage: 'Template url for the service.',
+    },
+    'console': {
+      usage: 'Enable Serverless Console integration. See: http://slss.io/console',
+      type: 'boolean',
     },
   },
   lifecycleEvents: ['initializeService', 'setupAws', 'autoUpdate', 'end'],
@@ -151,11 +157,23 @@ commands.set('install', {
 
 commands.set('login', {
   usage: 'Login or sign up for Serverless',
+  serviceDependencyMode: 'optional',
   lifecycleEvents: ['login'],
+  options: {
+    console: {
+      usage: 'Login into Serverless Console. See: http://slss.io/console',
+      type: 'boolean',
+    },
+    dashboard: {
+      usage: 'Login into Serverless Dashboard',
+      type: 'boolean',
+    },
+  },
 });
 
 commands.set('logout', {
   usage: 'Logout from Serverless',
+  serviceDependencyMode: 'optional',
   lifecycleEvents: ['logout'],
 });
 

@@ -8,13 +8,20 @@ const BbPromise = require('bluebird');
 const _ = require('lodash');
 const normalizeFiles = require('../../lib/normalize-files');
 const ServerlessError = require('../../../../serverless-error');
-const { log } = require('@serverless/utils/log');
+const log = require('@serverless/utils/log').log.get('check-for-changes');
+
+const fsp = fs.promises;
+
+const isDeploymentDirToken = RegExp.prototype.test.bind(
+  /^[\d]+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
+);
+const isOtelExtensionName = RegExp.prototype.test.bind(/^sls-otel\.\d+\.\d+\.\d+\.zip$/);
 
 module.exports = {
   async checkForChanges() {
     this.serverless.service.provider.shouldNotDeploy = false;
-
     if (this.options.force) {
+      log.debug('deployment forced - deploy');
       return this.checkLogGroupSubscriptionFilterResourceLimitExceeded();
     }
 
@@ -44,48 +51,41 @@ module.exports = {
 
     const params = {
       Bucket: this.bucketName,
-      Prefix: `${this.provider.getDeploymentPrefix()}/${service}/${this.provider.getStage()}`,
+      Prefix: `${this.provider.getDeploymentPrefix()}/${service}/${this.provider.getStage()}/`,
     };
 
-    return this.provider
-      .request('S3', 'listObjectsV2', params)
-      .catch((reason) => {
-        if (!reason.message.includes('The specified bucket does not exist')) {
-          return BbPromise.reject(reason);
-        }
+    const result = await (async () => {
+      try {
+        return await this.provider.request('S3', 'listObjectsV2', params);
+      } catch (error) {
+        if (!error.message.includes('The specified bucket does not exist')) throw error;
         const stackName = this.provider.naming.getStackName();
-        return BbPromise.reject(
-          new ServerlessError(
-            [
-              `The serverless deployment bucket "${params.Bucket}" does not exist.`,
-              `Create it manually if you want to reuse the CloudFormation stack "${stackName}",`,
-              'or delete the stack if it is no longer required.',
-            ].join(' '),
-            'DEPLOYMENT_BUCKET_DOES_NOT_EXIST'
-          )
+        throw new ServerlessError(
+          [
+            `The serverless deployment bucket "${params.Bucket}" does not exist.`,
+            `Create it manually if you want to reuse the CloudFormation stack "${stackName}",`,
+            'or delete the stack if it is no longer required.',
+          ].join(' '),
+          'DEPLOYMENT_BUCKET_DOES_NOT_EXIST'
         );
-      })
-      .then((result) => {
-        if (result && result.Contents && result.Contents.length) {
-          const objects = result.Contents;
+      }
+    })();
+    const objects = result.Contents.filter(({ Key: key }) =>
+      isDeploymentDirToken(key.split('/')[3])
+    );
+    if (!objects.length) return [];
 
-          const ordered = _.orderBy(objects, ['Key'], ['desc']);
+    const ordered = _.orderBy(objects, ['Key'], ['desc']);
 
-          const firstKey = ordered[0].Key;
-          const directory = firstKey.substring(0, firstKey.lastIndexOf('/'));
+    const firstKey = ordered[0].Key;
+    const directory = firstKey.substring(0, firstKey.lastIndexOf('/'));
 
-          const mostRecentObjects = ordered.filter((obj) => {
-            const objKey = obj.Key;
-            const objDirectory = objKey.substring(0, objKey.lastIndexOf('/'));
+    return ordered.filter((obj) => {
+      const objKey = obj.Key;
+      const objDirectory = objKey.substring(0, objKey.lastIndexOf('/'));
 
-            return directory === objDirectory;
-          });
-
-          return BbPromise.resolve(mostRecentObjects);
-        }
-
-        return BbPromise.resolve([]);
-      });
+      return directory === objDirectory;
+    });
   },
 
   // Gives the least recent last modify date across all the functions in the service.
@@ -121,70 +121,120 @@ module.exports = {
   },
 
   async getObjectMetadata(objects) {
-    if (objects && objects.length) {
-      const headObjectObjects = objects.map((obj) =>
-        this.provider.request('S3', 'headObject', {
-          Bucket: this.bucketName,
-          Key: obj.Key,
-        })
-      );
-
-      return BbPromise.all(headObjectObjects).then((result) => result);
-    }
-
-    return BbPromise.resolve([]);
+    return Promise.all(
+      objects.map(async (obj) => {
+        try {
+          const result = await this.provider.request('S3', 'headObject', {
+            Bucket: this.bucketName,
+            Key: obj.Key,
+          });
+          result.Key = obj.Key;
+          return result;
+        } catch (err) {
+          if (err.code === 'AWS_S3_HEAD_OBJECT_FORBIDDEN') {
+            throw new ServerlessError(
+              'Could not access objects in the deployment bucket. Make sure you have sufficient permissions to access it.',
+              err.code
+            );
+          }
+          throw err;
+        }
+      })
+    );
   },
 
   async checkIfDeploymentIsNecessary(objects, funcLastModifiedDate) {
-    if (objects && objects.length) {
-      const remoteHashes = objects.map((object) => object.Metadata.filesha256 || '');
-
-      const serverlessDirPath = path.join(this.serverless.serviceDir, '.serverless');
-
-      // create a hash of the CloudFormation body
-      const compiledCfTemplate = this.serverless.service.provider.compiledCloudFormationTemplate;
-      const normCfTemplate = normalizeFiles.normalizeCloudFormationTemplate(compiledCfTemplate);
-      const localCfHash = crypto
-        .createHash('sha256')
-        .update(JSON.stringify(normCfTemplate))
-        .digest('base64');
-
-      // create hashes for all the zip files
-      const zipFiles = globby.sync(['**.zip'], { cwd: serverlessDirPath, dot: true, silent: true });
-      if (this.serverless.service.package.artifact) {
-        zipFiles.push(
-          path.resolve(this.serverless.serviceDir, this.serverless.service.package.artifact)
-        );
-      }
-      // resolve paths and ensure we only hash each unique file once.
-      const zipFilePaths = Array.from(
-        new Set(zipFiles.map((zipFile) => path.resolve(serverlessDirPath, zipFile)))
-      );
-
-      const readFile = BbPromise.promisify(fs.readFile);
-      const zipFileHashesPromises = zipFilePaths.map((zipFilePath) =>
-        readFile(zipFilePath).then((zipFile) =>
-          crypto.createHash('sha256').update(zipFile).digest('base64')
-        )
-      );
-
-      return BbPromise.all(zipFileHashesPromises).then((zipFileHashes) => {
-        const localHashes = zipFileHashes;
-        localHashes.push(localCfHash);
-
-        // If any objects were changed after the last time the function was updated
-        // there could have been a failed deploy.
-        const changedAfterDeploy = objects.some((object) => {
-          return object.LastModified && object.LastModified > funcLastModifiedDate;
-        });
-
-        if (!changedAfterDeploy && _.isEqual(remoteHashes.sort(), localHashes.sort())) {
-          this.serverless.service.provider.shouldNotDeploy = true;
-        }
-      });
+    if (!objects.length) {
+      log.debug('no objects to compare - deploy');
+      return;
+    }
+    const remoteHashesMap = new Map();
+    for (const {
+      Key: name,
+      Metadata: { filesha256: hash },
+    } of objects) {
+      remoteHashesMap.set(name, hash);
     }
 
-    return BbPromise.resolve();
+    const serverlessDirPath = path.join(this.serverless.serviceDir, '.serverless');
+
+    // create a hash of the CloudFormation body
+    const compiledCfTemplate = this.serverless.service.provider.compiledCloudFormationTemplate;
+    const stateBasename = this.provider.naming.getServiceStateFileName();
+    const stateObject = JSON.parse(
+      await fsp.readFile(
+        path.join(this.serverless.serviceDir, '.serverless', stateBasename),
+        'utf-8'
+      )
+    );
+
+    const localHashesMap = new Map([
+      [
+        'compiled-cloudformation-template.json',
+        crypto
+          .createHash('sha256')
+          .update(
+            JSON.stringify(normalizeFiles.normalizeCloudFormationTemplate(compiledCfTemplate))
+          )
+          .digest('base64'),
+      ],
+      [
+        stateBasename,
+        crypto
+          .createHash('sha256')
+          .update(JSON.stringify(normalizeFiles.normalizeState(stateObject)))
+          .digest('base64'),
+      ],
+    ]);
+
+    // create hashes for all the zip files
+    const zipFiles = globby
+      .sync(['**.zip'], { cwd: serverlessDirPath, dot: true, silent: true })
+      .filter((basename) => !isOtelExtensionName(basename));
+    if (this.serverless.service.package.artifact) {
+      zipFiles.push(
+        path.resolve(this.serverless.serviceDir, this.serverless.service.package.artifact)
+      );
+    }
+    // resolve paths and ensure we only hash each unique file once.
+    const zipFilePaths = Array.from(
+      new Set(zipFiles.map((zipFile) => path.resolve(serverlessDirPath, zipFile)))
+    );
+
+    await Promise.all(
+      zipFilePaths.map((zipFilePath) =>
+        fsp.readFile(zipFilePath).then((zipFile) => {
+          localHashesMap.set(
+            zipFilePath,
+            crypto.createHash('sha256').update(zipFile).digest('base64')
+          );
+        })
+      )
+    );
+
+    // If any objects were changed after the last time the function was updated
+    // there could have been a failed deploy.
+    const changedAfterDeploy = objects.some((object) => {
+      return object.LastModified && object.LastModified > funcLastModifiedDate;
+    });
+
+    if (changedAfterDeploy) {
+      log.debug('function modification dates changed after last deploy - deploy');
+      return;
+    }
+    log.debug('artifacts on S3 (%o) and locally (%o)', remoteHashesMap, localHashesMap);
+
+    if (
+      _.isEqual(
+        Array.from(remoteHashesMap.values()).sort(),
+        Array.from(localHashesMap.values()).sort()
+      )
+    ) {
+      log.debug('no changes detected - do not deploy');
+      this.serverless.service.provider.shouldNotDeploy = true;
+      return;
+    }
+    log.debug('different artifacts resolved - deploy');
   },
 
   /**
@@ -195,7 +245,7 @@ module.exports = {
    * before deleting the old one. This precompile process aims to delete existent
    * subscription filters of functions that a new filter was provided, by checking the
    * current ARN with the new one that will be generated.
-   * See: https://git.io/fpKCM
+   * See: https://github.com/serverless/serverless/issues/3447
    */
   async checkLogGroupSubscriptionFilterResourceLimitExceeded() {
     const region = this.provider.getRegion();
@@ -205,8 +255,9 @@ module.exports = {
     const partition = account.partition;
 
     const functionNames = await this.serverless.service.getAllFunctions();
-    const cloudwatchLogEvents = _.flatten(
-      functionNames.map((functionName) => {
+
+    const cloudwatchLogEvents = functionNames
+      .map((functionName) => {
         const functionObj = this.serverless.service.getFunction(functionName);
         const FunctionName = functionObj.name;
         const events = functionObj.events;
@@ -222,12 +273,16 @@ module.exports = {
             return { FunctionName, functionName, logGroupName, logSubscriptionSerialNumber };
           });
       })
-    );
+      .flat();
 
     const cloudwatchLogEventsMap = _.groupBy(cloudwatchLogEvents, 'logGroupName');
     const logGroupNames = Object.keys(cloudwatchLogEventsMap);
+    if (!logGroupNames.length) {
+      log.debug('no log groups to investigate');
+      return;
+    }
 
-    return Promise.all(
+    await Promise.all(
       logGroupNames.map((logGroupName) =>
         this.fixLogGroupSubscriptionFilters({
           accountId,
@@ -257,6 +312,7 @@ module.exports = {
       )
       .catch(() => ({ subscriptionFilters: [] }));
     if (response.subscriptionFilters.length === 0) {
+      log.debug('no subscription filters detected');
       return false;
     }
 
@@ -284,6 +340,7 @@ module.exports = {
 
       return { destinationArn, logicalId };
     });
+    log.debug('new subscription filters %o', newSubscriptionFilters);
 
     // If subscription filters defined externally cause a situation where we cannot create all
     // subscription filters defined as a part of current service, we want to throw an error
@@ -291,6 +348,7 @@ module.exports = {
     const externalOldSubscriptionFilters = oldSubscriptionFilters.filter(
       (oldSubscriptionFilter) => !oldSubscriptionFilter.isInternal
     );
+    log.debug('external subscription filters %o', externalOldSubscriptionFilters);
     if (
       externalOldSubscriptionFilters.length + newSubscriptionFilters.length >
       CLOUDWATCHLOG_LOG_GROUP_EVENT_PER_FUNCTION_LIMIT
