@@ -55,4 +55,5 @@ functions:
 plugins:
   - serverless-wsgi
   - serverless-python-requirements
-  - serverless-api-cloudfront
+  - ./node_modules/serverless-api-cloudfront
+

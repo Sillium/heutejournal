@@ -5,7 +5,6 @@
   "author": "",
   "devDependencies": {
     "serverless-python-requirements": "latest",
-    "serverless-wsgi": "latest",
-    "serverless-api-cloudfront": "latest"
+    "serverless-wsgi": "latest"
   }
 }

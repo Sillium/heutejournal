@@ -3,7 +3,7 @@
 serverless_wsgi.py
 wsgi_handler.py
 
-node_modules
 package-lock.json
 *.pyc
 *.pyo
+#node_modules
