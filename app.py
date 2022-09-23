@@ -30,8 +30,12 @@ def get_when(search_term):
             """Ignore the tag that doesn't have a class atribute"""
             pass
     program = dict(zip(titles, dates))
+    if (search_term in program):
+        when = program[search_term]
+    else:
+        when = "- - -"
     return {
-        "when": (search_term in program) ? program[search_term] : "-",
+        "when": when,
         "searchTerm": search_term,
         "url": url
     }
