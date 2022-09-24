@@ -6,7 +6,7 @@ from flask import render_template
 app = Flask(__name__)
 
 # base_url = "https://www.tvspielfilm.de/tv-programm/sendungen/zdf,ZDF.html"
-base_url = "https://www.tvspielfilm.de/tv-programm/sendungen/?time=day&channel=ZDF"
+base_url = "https://www.tvspielfilm.de/tv-programm/sendungen/?time=primetime&channel=ZDF"
 
 def get_when(search_term):
     url = base_url
